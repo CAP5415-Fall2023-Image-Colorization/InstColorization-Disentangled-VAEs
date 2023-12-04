@@ -4,26 +4,33 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from argparse import ArgumentParser
 
-import detectron2
-from detectron2.utils.logger import setup_logger
-setup_logger()
-
 import numpy as np
 import cv2
-
-# import some common detectron2 utilities
-from detectron2 import model_zoo
-from detectron2.engine import DefaultPredictor
-from detectron2.config import get_cfg
 
 import torch
 from tqdm import tqdm
 
-cfg = get_cfg()
-cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))
-cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7
-cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml")
-predictor = DefaultPredictor(cfg)
+from mmdet.apis import DetInferencer
+
+
+# cfg = get_cfg()
+# cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))
+# cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7
+# cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml")
+# predictor = DefaultPredictor(cfg)
+
+# Choose to use a config
+model_name = 'mask-rcnn_x101-32x8d_fpn_ms-poly-3x_coco'
+# Setup a checkpoint file to load
+checkpoint = './checkpoints/mask_rcnn_x101_32x8d_fpn_mstrain-poly_3x_coco_20210607_161042-8bd2c639.pth'
+
+# Set the device to be used for evaluation
+device = 'cuda:0'
+
+thres = 0.7
+
+# Initialize the DetInferencer
+predictor = DetInferencer(model_name, checkpoint, device)
 
 parser = ArgumentParser()
 parser.add_argument("--test_img_dir", type=str, default='example', help='testing images folder')
@@ -42,12 +49,15 @@ for image_path in tqdm(image_list):
     lab_image = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l_channel, a_channel, b_channel = cv2.split(lab_image)
     l_stack = np.stack([l_channel, l_channel, l_channel], axis=2)
-    outputs = predictor(l_stack)
+    outputs = predictor(l_stack, pred_score_thr=0.7)
+
     save_path = join(output_npz_dir, image_path.split('.')[0])
-    pred_bbox = outputs["instances"].pred_boxes.to(torch.device('cpu')).tensor.numpy()
-    pred_scores = outputs["instances"].scores.cpu().data.numpy()
+    pred_bbox = np.array(outputs["predictions"][0]["bboxes"])
+    pred_scores = np.array(outputs["predictions"][0]["scores"])
+
     if args.filter_no_obj is True and pred_bbox.shape[0] == 0:
         print('delete {0}'.format(image_path))
         os.remove(join(input_dir, image_path))
         continue
+
     np.savez(save_path, bbox = pred_bbox, scores = pred_scores)

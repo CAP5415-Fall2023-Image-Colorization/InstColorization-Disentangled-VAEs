@@ -73,8 +73,9 @@ class TrainModel(BaseModel):
         else:
             print('Error Stage!')
             exit()
-        self.criterionL1 = networks.HuberLoss(delta=1. / opt.ab_norm)
+        #self.criterionL1 = networks.HuberLoss(delta=1. / opt.ab_norm)
         # self.criterionL1 = networks.L1Loss()
+        self.criterionL1 = networks.VAELoss(delta = 1. / opt.ab_norm, kl_weight=opt.lambda_kl)
 
         # initialize average loss values
         self.avg_losses = OrderedDict()

@@ -23,7 +23,9 @@ if __name__ == '__main__':
     else:
         print('Error! Wrong stage selection!')
         exit()
-    dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, shuffle=True, num_workers=8)
+
+    distributed_sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
+    dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, num_workers=8, pin_memory=True, sampler=distributed_sampler)
 
     dataset_size = len(dataset)
     print('#training images = %d' % dataset_size)
