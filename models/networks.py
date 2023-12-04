@@ -66,7 +66,7 @@ def init_net(net, init_type='xavier', gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropout=False, init_type='xavier', gpu_ids=[], use_tanh=True, classification=True):
+def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropout=False, init_type='xavier', gpu_ids=[], use_tanh=True, classification=False):
     netG = None
     norm_layer = get_norm_layer(norm_type=norm)
 
@@ -427,8 +427,6 @@ class FusionGenerator(nn.Module):
         self.weight_layer9_2 = WeightGenerator(64)
 
         self.model_out = nn.Sequential(nn.Conv2d(64, 2, kernel_size=1, padding=0, dilation=1, stride=1, bias=use_bias),nn.Tanh())
-
-        self.weight_layerout = WeightGenerator(2)
 
     def forward(self, input_A, input_B, mask_B, instance_feature, box_info_list):
 

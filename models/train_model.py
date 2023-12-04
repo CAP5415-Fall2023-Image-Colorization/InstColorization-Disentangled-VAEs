@@ -53,20 +53,18 @@ class TrainModel(BaseModel):
                                         'siggraph', opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids,
                                         use_tanh=True, classification=opt.classification)
             self.netGComp.eval()
-            self.optimizer_G = torch.optim.Adam(list(self.netGF.module.weight_layer.parameters()) +
+            self.optimizer_G = torch.optim.Adam(list(self.netGF.module.weight_layer.parameters()) + # TODO
                                                 list(self.netGF.module.weight_layer2.parameters()) +
                                                 list(self.netGF.module.weight_layer3.parameters()) +
                                                 list(self.netGF.module.weight_layer4.parameters()) +
-                                                list(self.netGF.module.weight_layer5.parameters()) +
                                                 list(self.netGF.module.weight_layer6.parameters()) +
-                                                list(self.netGF.module.weight_layer7.parameters()) +
+                                                list(self.netGF.module.weight_layer7_1.parameters()) +
+                                                list(self.netGF.module.weight_layer7_2.parameters()) +
                                                 list(self.netGF.module.weight_layer8_1.parameters()) +
                                                 list(self.netGF.module.weight_layer8_2.parameters()) +
                                                 list(self.netGF.module.weight_layer9_1.parameters()) +
                                                 list(self.netGF.module.weight_layer9_2.parameters()) +
-                                                list(self.netGF.module.weight_layer10_1.parameters()) +
-                                                list(self.netGF.module.weight_layer10_2.parameters()) +
-                                                list(self.netGF.module.model10.parameters()) +
+                                                list(self.netGF.module.model9.parameters()) +
                                                 list(self.netGF.module.model_out.parameters()),
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
@@ -109,11 +107,11 @@ class TrainModel(BaseModel):
 
     def forward(self):
         if self.opt.stage == 'full' or self.opt.stage == 'instance':
-            (_, self.fake_B_reg) = self.netG(self.real_A, self.hint_B, self.mask_B)
+            (self.fake_B_reg, self.mu, self.std) = self.netG(self.real_A, self.hint_B, self.mask_B)
         elif self.opt.stage == 'fusion':
-            (_, self.comp_B_reg) = self.netGComp(self.full_real_A, self.full_hint_B, self.full_mask_B)
-            (_, feature_map) = self.netG(self.real_A, self.hint_B, self.mask_B)
-            self.fake_B_reg = self.netGF(self.full_real_A, self.full_hint_B, self.full_mask_B, feature_map, self.box_info_list)
+            (self.comp_B_reg, self.full_mu, self.full_std) = self.netGComp(self.full_real_A, self.full_hint_B, self.full_mask_B)
+            (_, feature_map, self.inst_mu, self.inst_std) = self.netG(self.real_A, self.hint_B, self.mask_B)
+            self.fake_B_reg, self.mu, self.std = self.netGF(self.full_real_A, self.full_hint_B, self.full_mask_B, feature_map, self.box_info_list)
         else:
             print('Error! Wrong stage selection!')
             exit()
@@ -123,14 +121,22 @@ class TrainModel(BaseModel):
         self.optimizer_G.zero_grad()
         if self.opt.stage == 'full' or self.opt.stage == 'instance':
             self.loss_L1 = torch.mean(self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
-                                                        self.real_B.type(torch.cuda.FloatTensor)))
+                                                        self.real_B.type(torch.cuda.FloatTensor),
+                                                        self.mu, self.std
+                                                        ))
             self.loss_G = 10 * torch.mean(self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
-                                                        self.real_B.type(torch.cuda.FloatTensor)))
+                                                        self.real_B.type(torch.cuda.FloatTensor),
+                                                        self.mu, self.std
+                                                        ))
         elif self.opt.stage == 'fusion':
             self.loss_L1 = torch.mean(self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
-                                                        self.full_real_B.type(torch.cuda.FloatTensor)))
+                                                        self.full_real_B.type(torch.cuda.FloatTensor),
+                                                        self.mu, self.std,
+                                                        ))
             self.loss_G = 10 * torch.mean(self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
-                                                        self.full_real_B.type(torch.cuda.FloatTensor)))
+                                                        self.full_real_B.type(torch.cuda.FloatTensor),
+                                                        self.mu, self.std,
+                                                        ))
         else:
             print('Error! Wrong stage selection!')
             exit()
