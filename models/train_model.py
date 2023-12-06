@@ -41,17 +41,17 @@ class TrainModel(BaseModel):
             self.model_names = ['G', 'GF', 'GComp']
             self.netG = networks.define_G(num_in, opt.output_nc, opt.ngf,
                                         'instance', opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids,
-                                        use_tanh=True, classification=False)
+                                        use_tanh=True, classification=False) # instance
             self.netG.eval()
             
             self.netGF = networks.define_G(num_in, opt.output_nc, opt.ngf,
                                         'fusion', opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids,
-                                        use_tanh=True, classification=False)
+                                        use_tanh=True, classification=False) # fusion
             self.netGF.eval()
 
             self.netGComp = networks.define_G(num_in, opt.output_nc, opt.ngf,
                                         'siggraph', opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids,
-                                        use_tanh=True, classification=opt.classification)
+                                        use_tanh=True, classification=opt.classification) # full image
             self.netGComp.eval()
             self.optimizer_G = torch.optim.Adam(list(self.netGF.module.weight_layer.parameters()) + # TODO
                                                 list(self.netGF.module.weight_layer2.parameters()) +
@@ -120,6 +120,9 @@ class TrainModel(BaseModel):
             exit()
 
     def optimize_parameters(self):
+        '''
+        Update model weights, depending on the Stage.
+        '''
         self.forward()
         self.optimizer_G.zero_grad()
         if self.opt.stage == 'full' or self.opt.stage == 'instance':
@@ -159,6 +162,9 @@ class TrainModel(BaseModel):
         self.optimizer_G.step()
 
     def get_current_visuals(self):
+        '''
+        Generate images for viewing the model output.
+        '''
         from collections import OrderedDict
         visual_ret = OrderedDict()
         if self.opt.stage == 'full' or self.opt.stage == 'instance':
