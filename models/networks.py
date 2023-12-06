@@ -495,14 +495,14 @@ class FusionGenerator(nn.Module):
         mu = self.model5_mu(conv4_5.view(-1, 512 * 32 * 32))
         logvar = self.model5_logvar(conv4_5.view(-1, 512 * 32 * 32))
 
-        # z = self.reparameterize(mu, logvar)
+        z = self.reparameterize(mu, logvar)
 
-        # decoder_input = self.decoder_input(z)
-        # decoder_input += instance_feature['decoder_input']
+        decoder_input = self.decoder_input(z)
+        decoder_input += instance_feature['decoder_input']
 
-        # decoder_input = decoder_input.view(-1, 512, 32, 32)
+        decoder_input = decoder_input.view(-1, 512, 32, 32)
 
-        conv6_7 = self.model6(conv4_5)
+        conv6_7 = self.model6(decoder_input)
         conv6_7 = self.weight_layer6(instance_feature['conv6_7'], conv6_7, box_info_list[3])
 
         conv7_up = self.model7_upscale(conv6_7) + self.model7_skip_3(conv3_4)
@@ -730,12 +730,12 @@ class InstanceGenerator(nn.Module):
         mu = self.model5_mu(conv4_5.view(-1, 512 * 32 * 32))
         logvar = self.model5_logvar(conv4_5.view(-1, 512 * 32 * 32))
 
-        z = self.reparameterize(mu, logvar)
+        # z = self.reparameterize(mu, logvar)
 
-        decoder_input = self.decoder_input(z)
-        decoder_input = decoder_input.view(-1, 512, 32, 32)
+        # decoder_input = self.decoder_input(z)
+        # decoder_input = decoder_input.view(-1, 512, 32, 32)
 
-        conv6_7 = self.model6(decoder_input)
+        conv6_7 = self.model6(conv4_5)
         conv7_up = self.model7_upscale(conv6_7) + self.model7_skip_3(conv3_4)
         conv7_8 = self.model7(conv7_up)
         conv8_up = self.model8_upscale(conv7_8) + self.model8_skip_2(conv2_3)
@@ -761,8 +761,8 @@ class InstanceGenerator(nn.Module):
 
         feature_map['out_reg'] = out_reg
 
-        feature_map['mu'] = mu
-        feature_map['logvar'] = logvar
-        feature_map['decoder_input'] = decoder_input
+        # feature_map['mu'] = mu
+        # feature_map['logvar'] = logvar
+        # feature_map['decoder_input'] = decoder_input
 
         return (out_reg, feature_map, mu, logvar)

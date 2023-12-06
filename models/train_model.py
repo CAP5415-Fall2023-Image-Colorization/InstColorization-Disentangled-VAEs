@@ -64,8 +64,8 @@ class TrainModel(BaseModel):
                                                 list(self.netGF.module.weight_layer8_2.parameters()) +
                                                 list(self.netGF.module.weight_layer9_1.parameters()) +
                                                 list(self.netGF.module.weight_layer9_2.parameters()) +
-                                                # list(self.netGF.module.model5_mu.parameters()) +
-                                                # list(self.netGF.module.model5_logvar.parameters()) +
+                                                list(self.netGF.module.model5_mu.parameters()) +
+                                                list(self.netGF.module.model5_logvar.parameters()) +
                                                 list(self.netGF.module.model_out.parameters()),
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
@@ -73,10 +73,10 @@ class TrainModel(BaseModel):
             print('Error Stage!')
             exit()
 
-        # if opt.stage == 'full' or opt.stage == 'instance':
-        self.criterionL1 = networks.HuberLoss(delta=1. / opt.ab_norm)
-        # else:
-        #     self.criterionL1 = networks.VAELoss(delta = 1. / opt.ab_norm, kl_weight=opt.lambda_kl)
+        if opt.stage == 'full' or opt.stage == 'instance':
+            self.criterionL1 = networks.HuberLoss(delta=1. / opt.ab_norm)
+        else:
+            self.criterionL1 = networks.VAELoss(delta = 1. / opt.ab_norm, kl_weight=opt.lambda_kl)
 
         # initialize average loss values
         self.avg_losses = OrderedDict()
