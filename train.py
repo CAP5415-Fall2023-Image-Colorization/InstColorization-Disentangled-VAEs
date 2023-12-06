@@ -24,7 +24,25 @@ if __name__ == '__main__':
         print('Error! Wrong stage selection!')
         exit()
         
-    dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, shuffle=True, num_workers=8)
+    def collate_fn(batch):
+        batch = batch[0]
+
+        batch['cropped_rgb'] = [batch['cropped_rgb']]
+        batch['full_gray'] = [batch['full_gray']]
+        batch['full_rgb'] = [batch['full_rgb']]
+        batch['cropped_gray'] = [batch['cropped_gray']]
+        batch['box_info'] = [batch['box_info']]
+        batch['box_info_2x'] = [batch['box_info_2x']]
+        batch['box_info_4x'] = [batch['box_info_4x']]
+        batch['box_info_8x'] = [batch['box_info_8x']]
+        
+        return batch
+    
+    # if using Training_Fusion_Dataset, use collate_fn=collate_fn
+    if opt.stage == 'fusion':
+        dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, shuffle=True, num_workers=8, collate_fn=collate_fn)
+    else:
+        dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, shuffle=True, num_workers=8)
 
     dataset_size = len(dataset)
     print('#training images = %d' % dataset_size)
@@ -32,7 +50,7 @@ if __name__ == '__main__':
     model = create_model(opt)
     model.setup(opt)
 
-    opt.display_port = 8098
+    opt.display_port = 8097
     visualizer = Visualizer(opt)
     total_steps = 0
 
@@ -41,7 +59,7 @@ if __name__ == '__main__':
             epoch_iter = 0
 
             for data_raw in tqdm(dataset_loader, desc='batch', dynamic_ncols=True, leave=False):
-                total_steps += opt.batch_size
+                total_steps += 1
                 epoch_iter += opt.batch_size
 
                 data_raw['rgb_img'] = [data_raw['rgb_img']]
@@ -50,8 +68,10 @@ if __name__ == '__main__':
                 input_data = util.get_colorization_data(data_raw['gray_img'], opt, p=1.0, ab_thresh=0)
                 gt_data = util.get_colorization_data(data_raw['rgb_img'], opt, p=1.0, ab_thresh=10.0)
                 if gt_data is None:
+                    print("Issue 1")
                     continue
                 if(gt_data['B'].shape[0] < opt.batch_size):
+                    print("Issue 2")
                     continue
                 input_data['B'] = gt_data['B']
                 input_data['hint_B'] = gt_data['hint_B']
@@ -67,6 +87,7 @@ if __name__ == '__main__':
 
                 if total_steps % opt.print_freq == 0:
                     losses = model.get_current_losses()
+                    visualizer.print_current_losses(epoch, float(epoch_iter) / dataset_size, losses, 0, 0)
                     if opt.display_id > 0:
                         visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, opt, losses)
 
@@ -79,7 +100,7 @@ if __name__ == '__main__':
             epoch_iter = 0
 
             for data_raw in tqdm(dataset_loader, desc='batch', dynamic_ncols=True, leave=False):
-                total_steps += opt.batch_size
+                total_steps += 1
                 epoch_iter += opt.batch_size
                 box_info = data_raw['box_info'][0]
                 box_info_2x = data_raw['box_info_2x'][0]
@@ -90,6 +111,7 @@ if __name__ == '__main__':
                 full_input_data = util.get_colorization_data(data_raw['full_gray'], opt, p=1.0, ab_thresh=0)
                 full_gt_data = util.get_colorization_data(data_raw['full_rgb'], opt, p=1.0, ab_thresh=10.0)
                 if cropped_gt_data is None or full_gt_data is None:
+                    print("Issue?")
                     continue
                 cropped_input_data['B'] = cropped_gt_data['B']
                 full_input_data['B'] = full_gt_data['B']
@@ -104,6 +126,7 @@ if __name__ == '__main__':
 
                 if total_steps % opt.print_freq == 0:
                     losses = model.get_current_losses()
+                    visualizer.print_current_losses(epoch, float(epoch_iter) / dataset_size, losses, 0, 0)
                     if opt.display_id > 0:
                         visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, opt, losses)
             if epoch % opt.save_epoch_freq == 0:

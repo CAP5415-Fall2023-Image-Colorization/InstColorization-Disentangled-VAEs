@@ -34,6 +34,9 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
 
 
 class Visualizer():
+    '''
+    Local web display for performance checking.
+    '''
     def __init__(self, opt):
         self.display_id = opt.display_id
         self.use_html = opt.isTrain and not opt.no_html
@@ -145,7 +148,7 @@ class Visualizer():
     def print_current_losses(self, epoch, i, losses, t, t_data):
         message = '(epoch: %d, iters: %d, time: %.3f, data: %.3f) ' % (epoch, i, t, t_data)
         for k, v in losses.items():
-            message += '%s: %.3f, ' % (k, v)
+            message += '%s: %.5f, ' % (k, v)
 
         print(message)
         with open(self.log_name, "a") as log_file:

@@ -3,6 +3,9 @@ import torch
 
 
 class ImagePool():
+    '''
+    Collect random image pool
+    '''
     def __init__(self, pool_size):
         self.pool_size = pool_size
         if self.pool_size > 0:

@@ -4,6 +4,9 @@ import os
 
 
 class HTML:
+    '''
+    Class for generating html output of images.
+    '''
     def __init__(self, web_dir, title, reflesh=0):
         self.title = title
         self.web_dir = web_dir

@@ -7,6 +7,9 @@ from torch.optim import lr_scheduler
 
 
 def get_norm_layer(norm_type='instance'):
+    '''
+    Gets the normalization layer for the model.
+    '''
     if norm_type == 'batch':
         norm_layer = functools.partial(nn.BatchNorm2d, affine=True)
     elif norm_type == 'instance':
@@ -19,6 +22,10 @@ def get_norm_layer(norm_type='instance'):
 
 
 def get_scheduler(optimizer, opt):
+    '''
+    Set up Learning rate scheduler. LambdaLR is used for this project with a linear decay.
+    Other options include StepLR and ReduceLROnPlateau.
+    '''
     if opt.lr_policy == 'lambda':
         def lambda_rule(epoch):
             lr_l = 1.0 - max(0, epoch + 1 + opt.epoch_count - opt.niter) / float(opt.niter_decay + 1)
@@ -34,6 +41,9 @@ def get_scheduler(optimizer, opt):
 
 
 def init_weights(net, init_type='xavier', gain=0.02):
+    '''
+    Load model weights into the corresponding model architecture.
+    '''
     def init_func(m):
         classname = m.__class__.__name__
         if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
@@ -58,6 +68,9 @@ def init_weights(net, init_type='xavier', gain=0.02):
 
 
 def init_net(net, init_type='xavier', gpu_ids=[]):
+    '''
+    Load model to GPU.
+    '''
     if len(gpu_ids) > 0:
         assert(torch.cuda.is_available())
         net.to(gpu_ids[0])
@@ -67,6 +80,9 @@ def init_net(net, init_type='xavier', gpu_ids=[]):
 
 
 def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropout=False, init_type='xavier', gpu_ids=[], use_tanh=True, classification=False):
+    '''
+    Function for generating specific model types and initializing them.
+    '''
     netG = None
     norm_layer = get_norm_layer(norm_type=norm)
 
@@ -82,11 +98,18 @@ def define_G(input_nc, output_nc, ngf, which_model_netG, norm='batch', use_dropo
 
 
 class HuberLoss(nn.Module):
+    '''
+    Loss function for base image colorization. Smooth L1 loss aka Huber loss.
+    '''
     def __init__(self, delta=.01):
         super(HuberLoss, self).__init__()
         self.delta=delta
 
-    def __call__(self, in0, in1):
+    def __call__(self, in0, in1, ig1, ig2):
+        # replace any nan values with 0
+        # in0[torch.isnan(in0)] = 0
+        # in1[torch.isnan(in1)] = 0
+
         mask = torch.zeros_like(in0)
         mann = torch.abs(in0-in1)
         eucl = .5 * (mann**2)
@@ -94,32 +117,42 @@ class HuberLoss(nn.Module):
 
         # loss = eucl*mask + self.delta*(mann-.5*self.delta)*(1-mask)
         loss = eucl*mask/self.delta + (mann-.5*self.delta)*(1-mask)
-        return torch.sum(loss,dim=1,keepdim=True)
 
+        val = torch.sum(loss,dim=1,keepdim=True)
 
-class L1Loss(nn.Module):
-    def __init__(self):
-        super(L1Loss, self).__init__()
-
-    def __call__(self, in0, in1):
-        return torch.sum(torch.abs(in0-in1),dim=1,keepdim=True)
+        return val, val, val
     
 class VAELoss(nn.Module):
+    '''
+    Loss function for VAE, includes reconstruction loss and KL divergence loss. Reconstruction loss is the smooth L1 loss aka Huber loss.
+    '''
     def __init__(self, delta=.01, kl_weight=0.00025):
         super(VAELoss, self).__init__()
-        self.huber = HuberLoss(delta=delta)
         self.kl_weight = kl_weight
+        self.delta = delta
 
     def __call__(self, reconstruction, input, mu, logvar):
 
-        reconstruction_loss = self.huber(reconstruction, input)
+        mask = torch.zeros_like(reconstruction)
+        mann = torch.abs(reconstruction-input)
+        eucl = .5 * (mann**2)
+        mask[...] = mann < self.delta
+
+        # loss = eucl*mask + self.delta*(mann-.5*self.delta)*(1-mask)
+        loss = eucl*mask/self.delta + (mann-.5*self.delta)*(1-mask)
+
+        reconstruction_loss = torch.sum(loss,dim=1,keepdim=True)
         
         kld_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1), dim=0)
 
-        return reconstruction_loss + self.kl_weight * kld_loss
+        return (reconstruction_loss + self.kl_weight * kld_loss, reconstruction_loss, kld_loss)
 
 
 class SIGGRAPHGenerator(nn.Module):
+    '''
+    Architecture for full image colorization.
+
+    '''
     def __init__(self, input_nc, output_nc, norm_layer=nn.BatchNorm2d, use_tanh=True, classification=True):
         super(SIGGRAPHGenerator, self).__init__()
         self.input_nc = input_nc
@@ -136,10 +169,11 @@ class SIGGRAPHGenerator(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(64),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+
         )
 
         self.model2 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -147,10 +181,10 @@ class SIGGRAPHGenerator(nn.Module):
             nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(128),
-            nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
         self.model3 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -158,10 +192,11 @@ class SIGGRAPHGenerator(nn.Module):
             nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(256),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+
         )
 
         self.model4 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -169,15 +204,15 @@ class SIGGRAPHGenerator(nn.Module):
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(512),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
         # Mu and Var
-        self.model5_mu = nn.Linear(512 * 32 * 32, 1024)
-        self.model5_var = nn.Linear(512 * 32 * 32, 1024)
+        self.model5_mu = nn.Linear(512 * 32 * 32, 64)
+        self.model5_logvar = nn.Linear(512 * 32 * 32, 64)
 
         # Decoder
-        self.decoder_input = nn.Linear(1024, 512 * 32 * 32)
+        self.decoder_input = nn.Linear(64, 512 * 32 * 32)
 
         self.model6 = nn.Sequential(
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -246,14 +281,15 @@ class SIGGRAPHGenerator(nn.Module):
         conv4_5 = self.model4(conv3_4)
 
         mu = self.model5_mu(conv4_5.view(-1, 512 * 32 * 32))
-        logvar = self.model5_var(conv4_5.view(-1, 512 * 32 * 32))
+        logvar = self.model5_logvar(conv4_5.view(-1, 512 * 32 * 32))
 
-        z = self.reparameterize(mu, logvar)
+        # z = self.reparameterize(mu, logvar)
 
-        decoder_input = self.decoder_input(z)
-        decoder_input = decoder_input.view(-1, 512, 32, 32)
+        # decoder_input = self.decoder_input(z)
+        # decoder_input = decoder_input.view(-1, 512, 32, 32)
 
-        conv6_7 = self.model6(decoder_input)
+        conv6_7 = self.model6(conv4_5)
+        # print(conv6_7.shape, conv3_4.shape)
         conv7_up = self.model7_upscale(conv6_7) + self.model7_skip_3(conv3_4)
         conv7_8 = self.model7(conv7_up)
         conv8_up = self.model8_upscale(conv7_8) + self.model8_skip_2(conv2_3)
@@ -295,6 +331,9 @@ class SIGGRAPHGenerator(nn.Module):
 
 
 class FusionGenerator(nn.Module):
+    '''
+    Class for fused full image and instance model image colorization.
+    '''
     def __init__(self, input_nc, output_nc, norm_layer=nn.BatchNorm2d, use_tanh=True, classification=True):
         super(FusionGenerator, self).__init__()
         self.input_nc = input_nc
@@ -311,12 +350,14 @@ class FusionGenerator(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(64),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+
         )
 
         self.weight_layer = WeightGenerator(64)
 
+
         self.model2 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -324,12 +365,12 @@ class FusionGenerator(nn.Module):
             nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(128),
-            nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
         self.weight_layer2 = WeightGenerator(128)
 
         self.model3 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -337,12 +378,13 @@ class FusionGenerator(nn.Module):
             nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(256),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+
         )
 
         self.weight_layer3 = WeightGenerator(256)
 
         self.model4 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -350,17 +392,17 @@ class FusionGenerator(nn.Module):
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(512),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
         self.weight_layer4 = WeightGenerator(512)
 
         # Mu and Var
-        self.model5_mu = nn.Linear(512 * 32 * 32, 1024)
-        self.model5_var = nn.Linear(512 * 32 * 32, 1024)
+        self.model5_mu = nn.Linear(512 * 32 * 32, 64)
+        self.model5_logvar = nn.Linear(512 * 32 * 32, 64)
 
         # Decoder
-        self.decoder_input = nn.Linear(1024, 512 * 32 * 32)
+        self.decoder_input = nn.Linear(64, 512 * 32 * 32)
 
         self.model6 = nn.Sequential(
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -428,6 +470,12 @@ class FusionGenerator(nn.Module):
 
         self.model_out = nn.Sequential(nn.Conv2d(64, 2, kernel_size=1, padding=0, dilation=1, stride=1, bias=use_bias),nn.Tanh())
 
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(.5 * logvar)
+        eps = torch.randn_like(std)
+
+        return mu + eps * std
+    
     def forward(self, input_A, input_B, mask_B, instance_feature, box_info_list):
 
         init_image = torch.cat((input_A, input_B, mask_B), dim=1)
@@ -445,16 +493,16 @@ class FusionGenerator(nn.Module):
         conv4_5 = self.weight_layer4(instance_feature['conv4_5'], conv4_5, box_info_list[3])
 
         mu = self.model5_mu(conv4_5.view(-1, 512 * 32 * 32))
-        logvar = self.model5_var(conv4_5.view(-1, 512 * 32 * 32))
+        logvar = self.model5_logvar(conv4_5.view(-1, 512 * 32 * 32))
 
-        z = self.reparameterize(mu, logvar)
+        # z = self.reparameterize(mu, logvar)
 
-        decoder_input = self.decoder_input(z)
-        decoder_input += instance_feature['decoder_input']
+        # decoder_input = self.decoder_input(z)
+        # decoder_input += instance_feature['decoder_input']
 
-        decoder_input = decoder_input.view(-1, 512, 32, 32)
+        # decoder_input = decoder_input.view(-1, 512, 32, 32)
 
-        conv6_7 = self.model6(decoder_input)
+        conv6_7 = self.model6(conv4_5)
         conv6_7 = self.weight_layer6(instance_feature['conv6_7'], conv6_7, box_info_list[3])
 
         conv7_up = self.model7_upscale(conv6_7) + self.model7_skip_3(conv3_4)
@@ -480,51 +528,10 @@ class FusionGenerator(nn.Module):
         return (out_reg, mu, logvar)
 
 
-
-        # conv1_2 = self.model1(input_image)
-        # conv1_2 = self.weight_layer(instance_feature['conv1_2'], conv1_2, box_info_list[0])
-
-        # conv2_2 = self.model2(conv1_2[:,:,::2,::2])
-        # conv2_2 = self.weight_layer2(instance_feature['conv2_2'], conv2_2, box_info_list[1])
-
-        # conv3_3 = self.model3(conv2_2[:,:,::2,::2])
-        # conv3_3 = self.weight_layer3(instance_feature['conv3_3'], conv3_3, box_info_list[2])
-
-        # conv4_3 = self.model4(conv3_3[:,:,::2,::2])
-        # conv4_3 = self.weight_layer4(instance_feature['conv4_3'], conv4_3, box_info_list[3])
-
-        # conv5_3 = self.model5(conv4_3)
-        # conv5_3 = self.weight_layer5(instance_feature['conv5_3'], conv5_3, box_info_list[3])
-
-        # conv6_3 = self.model6(conv5_3)
-        # conv6_3 = self.weight_layer6(instance_feature['conv6_3'], conv6_3, box_info_list[3])
-
-        # conv7_3 = self.model7(conv6_3)
-        # conv7_3 = self.weight_layer7(instance_feature['conv7_3'], conv7_3, box_info_list[3])
-
-        # conv8_up = self.model8up(conv7_3) + self.model3short8(conv3_3)
-        # conv8_up = self.weight_layer8_1(instance_feature['conv8_up'], conv8_up, box_info_list[2])
-
-        # conv8_3 = self.model8(conv8_up)
-        # conv8_3 = self.weight_layer8_2(instance_feature['conv8_3'], conv8_3, box_info_list[2])
-
-        # conv9_up = self.model9up(conv8_3) + self.model2short9(conv2_2)
-        # conv9_up = self.weight_layer9_1(instance_feature['conv9_up'], conv9_up, box_info_list[1])
-
-        # conv9_3 = self.model9(conv9_up)
-        # conv9_3 = self.weight_layer9_2(instance_feature['conv9_3'], conv9_3, box_info_list[1])
-
-        # conv10_up = self.model10up(conv9_3) + self.model1short10(conv1_2)
-        # conv10_up = self.weight_layer10_1(instance_feature['conv10_up'], conv10_up, box_info_list[0])
-
-        # conv10_2 = self.model10(conv10_up)
-        # conv10_2 = self.weight_layer10_2(instance_feature['conv10_2'], conv10_2, box_info_list[0])
-        
-        # out_reg = self.model_out(conv10_2)
-        # return out_reg
-
-
 class WeightGenerator(nn.Module):
+    '''
+    Class for resizing and fusing instance layer parameters and full image parameters together with correct padding.
+    '''
     def __init__(self, input_ch, inner_ch=16):
         super(WeightGenerator, self).__init__()
         self.simple_instance_conv = nn.Sequential(
@@ -590,6 +597,9 @@ class WeightGenerator(nn.Module):
 
 
 class InstanceGenerator(nn.Module):
+    '''
+    Class for instance (bounding box images) image colorization.
+    '''
     def __init__(self, input_nc, output_nc, norm_layer=nn.BatchNorm2d, use_tanh=True, classification=True):
         super(InstanceGenerator, self).__init__()
         self.input_nc = input_nc
@@ -606,10 +616,11 @@ class InstanceGenerator(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(64),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+
         )
 
         self.model2 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -617,10 +628,10 @@ class InstanceGenerator(nn.Module):
             nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(128),
-            nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
         self.model3 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -628,10 +639,11 @@ class InstanceGenerator(nn.Module):
             nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(256),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+
         )
 
         self.model4 = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -639,15 +651,15 @@ class InstanceGenerator(nn.Module):
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
             nn.Mish(),
             norm_layer(512),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            # nn.MaxPool2d(kernel_size=2, stride=2),
         )
 
         # Mu and Var
-        self.model5_mu = nn.Linear(512 * 32 * 32, 1024)
-        self.model5_var = nn.Linear(512 * 32 * 32, 1024)
+        self.model5_mu = nn.Linear(512 * 32 * 32, 64)
+        self.model5_logvar = nn.Linear(512 * 32 * 32, 64)
 
         # Decoder
-        self.decoder_input = nn.Linear(1024, 512 * 32 * 32)
+        self.decoder_input = nn.Linear(64, 512 * 32 * 32)
 
         self.model6 = nn.Sequential(
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1, bias=use_bias),
@@ -716,7 +728,7 @@ class InstanceGenerator(nn.Module):
         conv4_5 = self.model4(conv3_4)
 
         mu = self.model5_mu(conv4_5.view(-1, 512 * 32 * 32))
-        logvar = self.model5_var(conv4_5.view(-1, 512 * 32 * 32))
+        logvar = self.model5_logvar(conv4_5.view(-1, 512 * 32 * 32))
 
         z = self.reparameterize(mu, logvar)
 
@@ -753,4 +765,4 @@ class InstanceGenerator(nn.Module):
         feature_map['logvar'] = logvar
         feature_map['decoder_input'] = decoder_input
 
-        return (out_reg, mu, logvar, feature_map)
+        return (out_reg, feature_map, mu, logvar)

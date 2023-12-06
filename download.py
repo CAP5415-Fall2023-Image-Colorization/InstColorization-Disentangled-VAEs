@@ -39,13 +39,7 @@ parser.add_argument("--mode", type=str, default='pretrained-weight', help='pretr
 parser.add_argument("--dataset_dir", type=str, default='data', help='training dataset path')
 args = parser.parse_args()
 
-if args.mode == 'pretrained-weight':
-
-    file_id = '1Xb-DKAA9ibCVLqm8teKd1MWk6imjwTBh'
-    destination = 'checkpoints.zip'
-    download_file_from_google_drive(file_id, destination)
-
-elif args.mode == 'cocostuff':
+if args.mode == 'cocostuff':
     print('download cocostuff training dataset')
     url = "http://images.cocodataset.org/zips/train2017.zip"
     response = requests.get(url, stream = True)

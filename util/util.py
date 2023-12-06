@@ -200,7 +200,7 @@ def get_colorization_data(data_raw, opt, ab_thresh=5., p=.125, num_points=None):
 
     if(ab_thresh > 0): # mask out grayscale images
         thresh = 1.*ab_thresh/opt.ab_norm
-        mask = torch.sum(torch.abs(torch.max(torch.max(data['B'],dim=3)[0],dim=2)[0]-torch.min(torch.min(data['B'],dim=3)[0],dim=2)[0]),dim=1) >= thresh
+        mask = torch.sum(torch.abs(torch.max(torch.max(data['B'],dim=3)[0],dim=2)[0]-torch.min(torch.min(data['B'],dim=3)[0],dim=2)[0]),dim=1) >= 0
         data['A'] = data['A'][mask,:,:,:]
         data['B'] = data['B'][mask,:,:,:]
         # print('Removed %i points'%torch.sum(mask==0).numpy())

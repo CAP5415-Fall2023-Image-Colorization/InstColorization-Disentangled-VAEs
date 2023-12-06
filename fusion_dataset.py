@@ -11,6 +11,9 @@ from image_util import *
 
 
 class Fusion_Testing_Dataset(Data.Dataset):
+    '''
+    Dataset class for testing on COCO dataset with the Fusion model. [val2017.zip]
+    '''
     def __init__(self, opt, box_num=8):
         self.PRED_BBOX_DIR = '{0}_bbox'.format(opt.test_img_dir)
         self.IMAGE_DIR = opt.test_img_dir
@@ -62,8 +65,6 @@ class Fusion_Testing_Dataset(Data.Dataset):
 class Training_Full_Dataset(Data.Dataset):
     '''
     Training on COCOStuff dataset. [train2017.zip]
-    
-    Download the training set from https://github.com/nightrome/cocostuff
     '''
     def __init__(self, opt):
         self.IMAGE_DIR = opt.train_img_dir
@@ -77,6 +78,7 @@ class Training_Full_Dataset(Data.Dataset):
         output = {}
         output['rgb_img'] = self.transforms(rgb_img)
         output['gray_img'] = self.transforms(gray_img)
+        output['file_id'] = self.IMAGE_ID_LIST[index]
         return output
 
     def __len__(self):
@@ -85,9 +87,7 @@ class Training_Full_Dataset(Data.Dataset):
 
 class Training_Instance_Dataset(Data.Dataset):
     '''
-    Training on COCOStuff dataset. [train2017.zip]
-    
-    Download the training set from https://github.com/nightrome/cocostuff
+    Training on COCO dataset. [train2017.zip]
 
     Make sure you've predicted all the images' bounding boxes using inference_bbox.py
 
@@ -115,6 +115,7 @@ class Training_Instance_Dataset(Data.Dataset):
         output = {}
         output['rgb_img'] = self.transforms(rgb_img.crop((startx, starty, endx, endy)))
         output['gray_img'] = self.transforms(gray_img.crop((startx, starty, endx, endy)))
+        output['file_id'] = self.IMAGE_ID_LIST[index]
         return output
 
     def __len__(self):
@@ -123,9 +124,7 @@ class Training_Instance_Dataset(Data.Dataset):
 
 class Training_Fusion_Dataset(Data.Dataset):
     '''
-    Training on COCOStuff dataset. [train2017.zip]
-    
-    Download the training set from https://github.com/nightrome/cocostuff
+    Training on COCO dataset. [train2017.zip]
 
     Make sure you've predicted all the images' bounding boxes using inference_bbox.py
 
@@ -137,7 +136,8 @@ class Training_Fusion_Dataset(Data.Dataset):
         self.IMAGE_ID_LIST = [f for f in listdir(self.IMAGE_DIR) if isfile(join(self.IMAGE_DIR, f))]
 
         self.transforms = transforms.Compose([transforms.Resize((opt.fineSize, opt.fineSize), interpolation=2),
-                                              transforms.ToTensor()])
+                                              transforms.ToTensor(),
+                                              ])
         self.final_size = opt.fineSize
         self.box_num = box_num
 
@@ -174,6 +174,8 @@ class Training_Fusion_Dataset(Data.Dataset):
         output['box_info_4x'] = torch.from_numpy(box_info_4x).type(torch.long)
         output['box_info_8x'] = torch.from_numpy(box_info_8x).type(torch.long)
         output['file_id'] = self.IMAGE_ID_LIST[index]
+
+        #print(output['cropped_rgb'].shape, output['cropped_gray'].shape, output['full_rgb'].shape, output['full_gray'].shape)
         return output
 
     def __len__(self):

@@ -16,6 +16,10 @@ from matplotlib import colors
 
 
 class FusionModel(BaseModel):
+    '''
+    Model wrapper for the FusionModel, used for testing and demonstration purposes.
+    '''
+    
     def name(self):
         return 'FusionModel'
 
@@ -32,21 +36,24 @@ class FusionModel(BaseModel):
         
         self.netG = networks.define_G(num_in, opt.output_nc, opt.ngf,
                                       'instance', opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids,
-                                      use_tanh=True, classification=False)
+                                      use_tanh=True, classification=False) # instance
         self.netG.eval()
         
         self.netGF = networks.define_G(num_in, opt.output_nc, opt.ngf,
                                       'fusion', opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids,
-                                      use_tanh=True, classification=False)
+                                      use_tanh=True, classification=False) # fusion
         self.netGF.eval()
 
         self.netGComp = networks.define_G(num_in, opt.output_nc, opt.ngf,
                                       'siggraph', opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids,
-                                      use_tanh=True, classification=opt.classification)
+                                      use_tanh=True, classification=opt.classification) # full image
         self.netGComp.eval()
 
 
     def set_input(self, input):
+        '''
+        Set normal inputs to do forward for model
+        '''
         AtoB = self.opt.which_direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
@@ -58,6 +65,9 @@ class FusionModel(BaseModel):
         self.real_B_enc = util.encode_ab_ind(self.real_B[:, :, ::4, ::4], self.opt)
     
     def set_fusion_input(self, input, box_info):
+        '''
+        Set fusion inputs to do forward for model
+        '''
         AtoB = self.opt.which_direction == 'AtoB'
         self.full_real_A = input['A' if AtoB else 'B'].to(self.device)
         self.full_real_B = input['B' if AtoB else 'A'].to(self.device)
@@ -70,6 +80,9 @@ class FusionModel(BaseModel):
         self.box_info_list = box_info
 
     def set_forward_without_box(self, input):
+        '''
+        Fusion module without bounding box detected
+        '''
         AtoB = self.opt.which_direction == 'AtoB'
         self.full_real_A = input['A' if AtoB else 'B'].to(self.device)
         self.full_real_B = input['B' if AtoB else 'A'].to(self.device)
@@ -90,6 +103,11 @@ class FusionModel(BaseModel):
         out_img = torch.clamp(util.lab2rgb(torch.cat((self.full_real_A.type(torch.cuda.FloatTensor), self.fake_B_reg.type(torch.cuda.FloatTensor)), dim=1), self.opt), 0.0, 1.0)
         out_img = np.transpose(out_img.cpu().data.numpy()[0], (1, 2, 0))
         io.imsave(path, img_as_ubyte(out_img))
+
+    def get_current_img(self):
+        out_img = torch.clamp(util.lab2rgb(torch.cat((self.full_real_A.type(torch.cuda.FloatTensor), self.fake_B_reg.type(torch.cuda.FloatTensor)), dim=1), self.opt), 0.0, 1.0)
+        out_img = np.transpose(out_img.cpu().data.numpy()[0], (1, 2, 0))
+        return out_img
 
     def setup_to_test(self, fusion_weight_path):
         GF_path = 'checkpoints/{0}/latest_net_GF.pth'.format(fusion_weight_path)

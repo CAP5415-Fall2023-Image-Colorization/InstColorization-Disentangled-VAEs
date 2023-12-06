@@ -20,9 +20,9 @@ from mmdet.apis import DetInferencer
 # predictor = DefaultPredictor(cfg)
 
 # Choose to use a config
-model_name = 'mask-rcnn_x101-32x8d_fpn_ms-poly-3x_coco'
+model_name = 'rtmdet_x_8xb32-300e_coco'
 # Setup a checkpoint file to load
-checkpoint = './checkpoints/mask_rcnn_x101_32x8d_fpn_mstrain-poly_3x_coco_20210607_161042-8bd2c639.pth'
+checkpoint = './checkpoints/rtmdet_x_8xb32-300e_coco_20220715_230555-cc79b9ae.pth'
 
 # Set the device to be used for evaluation
 device = 'cuda:0'
@@ -54,6 +54,9 @@ for image_path in tqdm(image_list):
     save_path = join(output_npz_dir, image_path.split('.')[0])
     pred_bbox = np.array(outputs["predictions"][0]["bboxes"])
     pred_scores = np.array(outputs["predictions"][0]["scores"])
+
+    pred_bbox = pred_bbox[pred_scores >= thres]
+    pred_scores = pred_scores[pred_scores >= thres]
 
     if args.filter_no_obj is True and pred_bbox.shape[0] == 0:
         print('delete {0}'.format(image_path))

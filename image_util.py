@@ -46,6 +46,9 @@ def gen_maskrcnn_bbox_fromPred(pred_data_path, box_num_upbound=-1):
     return pred_bbox
 
 def get_box_info(pred_bbox, original_shape, final_size):
+    '''
+    Retrieves info about bounding box sizes.
+    '''
     assert len(pred_bbox) == 4
     resize_startx = int(pred_bbox[0] / original_shape[0] * final_size)
     resize_starty = int(pred_bbox[1] / original_shape[1] * final_size)

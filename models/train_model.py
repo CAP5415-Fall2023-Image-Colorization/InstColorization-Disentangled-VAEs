@@ -25,7 +25,7 @@ class TrainModel(BaseModel):
 
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
-        self.loss_names = ['G', 'L1']
+        self.loss_names = ['G', 'L1', 'R', 'KL']
         # load/define networks
         num_in = opt.input_nc + opt.output_nc + 1
         self.optimizers = []
@@ -64,16 +64,19 @@ class TrainModel(BaseModel):
                                                 list(self.netGF.module.weight_layer8_2.parameters()) +
                                                 list(self.netGF.module.weight_layer9_1.parameters()) +
                                                 list(self.netGF.module.weight_layer9_2.parameters()) +
-                                                list(self.netGF.module.model9.parameters()) +
+                                                # list(self.netGF.module.model5_mu.parameters()) +
+                                                # list(self.netGF.module.model5_logvar.parameters()) +
                                                 list(self.netGF.module.model_out.parameters()),
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
         else:
             print('Error Stage!')
             exit()
-        #self.criterionL1 = networks.HuberLoss(delta=1. / opt.ab_norm)
-        # self.criterionL1 = networks.L1Loss()
-        self.criterionL1 = networks.VAELoss(delta = 1. / opt.ab_norm, kl_weight=opt.lambda_kl)
+
+        # if opt.stage == 'full' or opt.stage == 'instance':
+        self.criterionL1 = networks.HuberLoss(delta=1. / opt.ab_norm)
+        # else:
+        #     self.criterionL1 = networks.VAELoss(delta = 1. / opt.ab_norm, kl_weight=opt.lambda_kl)
 
         # initialize average loss values
         self.avg_losses = OrderedDict()
@@ -120,27 +123,39 @@ class TrainModel(BaseModel):
         self.forward()
         self.optimizer_G.zero_grad()
         if self.opt.stage == 'full' or self.opt.stage == 'instance':
-            self.loss_L1 = torch.mean(self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
+            self.loss_L1, self.loss_R, self.loss_KL = self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
                                                         self.real_B.type(torch.cuda.FloatTensor),
                                                         self.mu, self.std
-                                                        ))
+                                                        )
+            
+            self.loss_L1 = torch.mean(self.loss_L1)
+            self.loss_R = torch.mean(self.loss_R)
+            self.loss_KL = torch.mean(self.loss_KL)
+
             self.loss_G = 10 * torch.mean(self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
                                                         self.real_B.type(torch.cuda.FloatTensor),
                                                         self.mu, self.std
-                                                        ))
+                                                        )[0])
         elif self.opt.stage == 'fusion':
-            self.loss_L1 = torch.mean(self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
+            self.loss_L1, self.loss_R, self.loss_KL = self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
                                                         self.full_real_B.type(torch.cuda.FloatTensor),
                                                         self.mu, self.std,
-                                                        ))
+                                                        )
+            
+            self.loss_L1 = torch.mean(self.loss_L1)
+            self.loss_R = torch.mean(self.loss_R)
+            self.loss_KL = torch.mean(self.loss_KL)
+
             self.loss_G = 10 * torch.mean(self.criterionL1(self.fake_B_reg.type(torch.cuda.FloatTensor),
                                                         self.full_real_B.type(torch.cuda.FloatTensor),
                                                         self.mu, self.std,
-                                                        ))
+                                                        )[0])
         else:
             print('Error! Wrong stage selection!')
             exit()
-        self.loss_G.backward()
+        # Only run if not nan
+        if not torch.isnan(self.loss_G):
+            self.loss_G.backward()
         self.optimizer_G.step()
 
     def get_current_visuals(self):

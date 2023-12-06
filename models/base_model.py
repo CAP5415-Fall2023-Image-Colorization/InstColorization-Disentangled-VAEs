@@ -5,6 +5,9 @@ from . import networks
 
 
 class BaseModel():
+    '''
+    Base class for model wrappers.
+    '''
 
     # modify parser to add command line options,
     # and also change the default values if needed

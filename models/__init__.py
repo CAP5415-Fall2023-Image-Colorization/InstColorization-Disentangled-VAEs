@@ -3,9 +3,11 @@ from models.base_model import BaseModel
 
 
 def find_model_using_name(model_name):
-    # Given the option --model [modelname],
-    # the file "models/modelname_model.py"
-    # will be imported.
+    '''
+    Given the option --model [modelname],
+    the file "models/modelname_model.py"
+    will be imported.
+    '''
     model_filename = "models." + model_name + "_model"
     modellib = importlib.import_module(model_filename)
 
@@ -27,11 +29,17 @@ def find_model_using_name(model_name):
 
 
 def get_option_setter(model_name):
+    '''
+    Changes options for model.
+    '''
     model_class = find_model_using_name(model_name)
     return model_class.modify_commandline_options
 
 
 def create_model(opt):
+    '''
+    Creates found model.
+    '''
     model = find_model_using_name(opt.model)
     instance = model()
     instance.initialize(opt)
